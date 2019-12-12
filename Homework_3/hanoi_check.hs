@@ -1,3 +1,4 @@
+module Hanoi_check where
 import Data.Char
 
 type Peg = String
@@ -27,28 +28,43 @@ hanoi n a b c d = hanoi (n-x) a c b d ++ hanoi3 x a b d ++ hanoi (n-x) c b a d
 data Report = Bad | Ok deriving Show
 type Config =[[Int]]
 
+-- conversion from string to int
+-- "a" = 10, "b" = 11, "c"=12, "d"=13
+-- `rem` 10 is necessary to get the correct index of a sublist of a configuration
 getIndex :: String -> Int
 getIndex (x:_) = (digitToInt x) `rem` 10
 
-updateConf :: Move -> Config -> Config
-updateConf _ [] = []
-updateConf (from,to) [(a:as),(bs),(cs),(ds)] | from == "a" && to == "b" = [(as),(a:bs),(cs),(ds)]
-updateConf (from,to) [(a:as),(bs),(cs),(ds)] | from == "a" && to == "c" = [(as),(bs),(a:cs),(ds)]
-updateConf (from,to) [(a:as),(bs),(cs),(ds)] | from == "a" && to == "d" = [(as),(bs),(cs),(a:ds)]
-updateConf (from,to) [(as),(b:bs),(cs),(ds)] | from == "b" && to == "a" = [(b:as),(bs),(cs),(ds)]
-updateConf (from,to) [(as),(b:bs),(cs),(ds)] | from == "b" && to == "c" = [(as),(bs),(b:cs),(ds)]
-updateConf (from,to) [(as),(b:bs),(cs),(ds)] | from == "b" && to == "d" = [(as),(bs),(cs),(b:ds)]
-updateConf (from,to) [(as),(bs),(c:cs),(ds)] | from == "c" && to == "a" = [(c:as),(bs),(cs),(ds)]
-updateConf (from,to) [(as),(bs),(c:cs),(ds)] | from == "c" && to == "b" = [(as),(c:bs),(cs),(ds)]
-updateConf (from,to) [(as),(bs),(c:cs),(ds)] | from == "c" && to == "d" = [(as),(bs),(cs),(c:ds)]
-updateConf (from,to) [(as),(bs),(cs),(d:ds)] | from == "d" && to == "a" = [(d:as),(bs),(cs),(ds)]
-updateConf (from,to) [(as),(bs),(cs),(d:ds)] | from == "d" && to == "b" = [(as),(d:bs),(cs),(ds)]
-updateConf (from,to) [(as),(bs),(cs),(d:ds)] | from == "d" && to == "c" = [(as),(bs),(d:cs),(ds)]
+-- check if it is possible to move a disc from peg 'from' to peg 'to'
+checkHeads :: (Int,Int) -> Config -> Bool
+checkHeads (from,to) conf = head (conf !! from) > head (conf !! to)
+                    
+-- checking of:
+-- 1) if we are moving from an empty peg 
+-- 2) we are inserting to a non empty peg combined to checkHeads result
+checkPegs :: (Int,Int) -> Config -> Maybe Bool
+checkPegs (from,to) conf = case (null (conf !! from) || not (null (conf !! to)) && checkHeads (from,to) conf) of
+                                       True -> Nothing
+                                       False -> Just True
 
+-- update of configuration after a valid move
+updateConf:: (Int,Int) -> [Int] -> [Int] -> Config -> Config
+updateConf (from,to) sc tc conf = take to firstEdit ++ [tc] ++ drop (to + 1) firstEdit
+     where firstEdit = take from conf ++ [sc] ++ drop (from + 1) conf 
 
+-- function which applies a move to a configuration calling the auxiliary functions
+checkMove :: (Move) -> Config -> Maybe Config
+checkMove (from,to) conf = case (checkPegs (indexFrom,indexTo) conf) of
+                                   Nothing -> Nothing
+                                   Just True -> Just (updateConf (indexFrom,indexTo) updateStartingCol updateTargetCol conf)
+                         where indexFrom = getIndex(from) 
+                               indexTo = getIndex(to)
+                               removedElem = head (conf !! indexFrom) 
+                               updateStartingCol = tail (conf !! indexFrom) 
+                               updateTargetCol = [removedElem] ++ (conf !! indexTo)
+
+-- main recursive function which checks moves list and returns the right result 
 check :: [Move] -> (Int, Config) -> ((Report, [Move]),(Int, Config))
-check ((from,to):ms) (moves,(conf))
-                                   | null (conf !! getIndex(from)) = ((Bad, [(from,to)]),(moves,conf)) 
-                                   | not (null (conf !! getIndex(to))) && (head (conf !! getIndex(from)) > head (conf !! getIndex(to))) =  ((Bad, [(from,to)]),(moves,conf))
-                                   | length ((from,to):ms) == 1 = ((Ok, []),(moves + 1, updateConf (from,to) conf)) 
-                                   | otherwise = check ms (moves + 1, (updateConf (from,to) conf))
+check ([]) (moves,conf) = ((Ok, []),(moves, conf))
+check ((from,to):ms) (moves,conf) = case (checkMove (from,to) conf) of 
+                                               Nothing -> ((Bad, [(from,to)]),(moves,conf))
+                                               Just newConf -> check ms (moves + 1, newConf)
